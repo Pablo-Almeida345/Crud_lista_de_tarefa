@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Listas de Tarefas</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+    <h1 id="form-titulo">Criar Nova Lista de Tarefas</h1>
+    
+    <form id="form-lista">
+        <input type="hidden" id="lista-id">
+        
+        <div class="form-group">
+            <label for="titulo">Título da Lista:</label>
+            <input type="text" id="titulo" required placeholder="Ex: Compras do mês, Rotina matinal...">
+        </div>
+
+        <div class="form-group">
+            <label for="tipo">Formato da Lista:</label>
+            <select id="tipo" onchange="atualizarCampoConteudo()">
+                <option value="descricao">Descrição (Texto livre)</option>
+                <option value="sequencia">Sequência (Passo a passo numerado)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="conteudo" id="label-conteudo">Descrição:</label>
+            <textarea id="conteudo" rows="5" required placeholder="Escreva os detalhes da sua tarefa aqui..."></textarea>
+        </div>
+
+        <div class="botoes-form">
+            <button type="submit" class="btn-salvar" id="btn-submit">Salvar Lista</button>
+            <button type="button" class="btn-cancelar" id="btn-cancelar" onclick="resetarFormulario()">Cancelar Edição</button>
+        </div>
+    </form>
+
+    <hr>
+
+    <h2>Minhas Listas Salvas</h2>
+    <div id="listas-container"></div>
+</div>
+
+<script>
+    const API_URL = 'http://localhost:3000/api/listas';
+
+    function atualizarCampoConteudo() {
+        const tipo = document.getElementById('tipo').value;
+        const label = document.getElementById('label-conteudo');
+        const textarea = document.getElementById('conteudo');
+
+        if (tipo === 'sequencia') {
+            label.innerText = 'Passos da Sequência (escreva um item por linha):';
+            textarea.placeholder = 'Acordar às 7h\nPreparar o café\nRevisar e-mails';
+        } else {
+            label.innerText = 'Descrição:';
+            textarea.placeholder = 'Escreva os detalhes da sua tarefa aqui...';
+        }
+    }
+
+    async function carregarListas() {
+        try {
+            const resposta = await fetch(API_URL);
+            const listas = await resposta.json();
+            const container = document.getElementById('listas-container');
+            container.innerHTML = '';
+
+            if (listas.length === 0) {
+                container.innerHTML = '<p class="vazio">Nenhuma lista cadastrada ainda.</p>';
+                return;
+            }
+
+            listas.forEach(lista => {
+                let conteudoHtml = '';
+
+                if (lista.tipo === 'sequencia') {
+                    const itens = lista.conteudo.split('\n').filter(linha => linha.trim() !== '');
+                    conteudoHtml = '<ol class="conteudo-sequencia">' + 
+                        itens.map(item => `<li>${escaparHtml(item)}</li>`).join('') + 
+                        '</ol>';
+                } else {
+                    conteudoHtml = `<p class="conteudo-descricao">${escaparHtml(lista.conteudo)}</p>`;
+                }
+
+                const badge = lista.tipo === 'sequencia' 
+                    ? '<span class="badge badge-seq">Sequência</span>' 
+                    : '<span class="badge badge-desc">Descrição</span>';
+
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div>
+                            <span class="card-titulo">${escaparHtml(lista.titulo)}</span>
+                            ${badge}
+                        </div>
+                        <div class="acoes">
+                            <button class="btn-editar">Editar</button>
+                            <button class="btn-excluir">Excluir</button>
+                        </div>
+                    </div>
+                    <div>${conteudoHtml}</div>
+                `;
+
+                card.querySelector('.btn-editar').addEventListener('click', () => prepararEdicao(lista));
+                card.querySelector('.btn-excluir').addEventListener('click', () => excluirLista(lista.id));
+
+                container.appendChild(card);
+            });
+        } catch (erro) {
+            document.getElementById('listas-container').innerHTML = 
+                '<p class="vazio">Aguardando conexão com o servidor back-end...</p>';
+        }
+    }
+
+    document.getElementById('form-lista').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const id = document.getElementById('lista-id').value;
+        const titulo = document.getElementById('titulo').value;
+        const tipo = document.getElementById('tipo').value;
+        const conteudo = document.getElementById('conteudo').value;
+
+        const metodo = id ? 'PUT' : 'POST';
+        const url = id ? `${API_URL}/${id}` : API_URL;
+
+        await fetch(url, {
+            method: metodo,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ titulo, tipo, conteudo })
+        });
+
+        resetarFormulario();
+        carregarListas();
+    });
+
+    function prepararEdicao(lista) {
+        document.getElementById('form-titulo').innerText = 'Editar Lista de Tarefas';
+        document.getElementById('lista-id').value = lista.id;
+        document.getElementById('titulo').value = lista.titulo;
+        document.getElementById('tipo').value = lista.tipo;
+        document.getElementById('conteudo').value = lista.conteudo;
+
+        atualizarCampoConteudo();
+        document.getElementById('btn-submit').innerText = 'Atualizar Lista';
+        document.getElementById('btn-cancelar').style.display = 'inline-block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function excluirLista(id) {
+        if (confirm('Deseja realmente excluir esta lista?')) {
+            await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+            carregarListas();
+        }
+    }
+
+    function resetarFormulario() {
+        document.getElementById('form-titulo').innerText = 'Criar Nova Lista de Tarefas';
+        document.getElementById('form-lista').reset();
+        document.getElementById('lista-id').value = '';
+        document.getElementById('btn-submit').innerText = 'Salvar Lista';
+        document.getElementById('btn-cancelar').style.display = 'none';
+        atualizarCampoConteudo();
+    }
+
+    function escaparHtml(texto) {
+        const div = document.createElement('div');
+        div.innerText = texto;
+        return div.innerHTML;
+    }
+
+    carregarListas();
+</script>
+
+</body>
+</html>
