@@ -22,7 +22,6 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
     console.log('Conectado ao banco SQLite com sucesso!');
 });
 
-// Cria a tabela automaticamente ao iniciar
 db.serialize(() => {
     db.run(`
         CREATE TABLE IF NOT EXISTS listas_tarefas (
@@ -41,9 +40,7 @@ db.serialize(() => {
     });
 });
 
-// ==========================================
-// ROTAS DO CRUD
-// ==========================================
+// ROTAS
 
 // [READ] Listar todas as listas de tarefas
 app.get('/api/listas', (req, res) => {
